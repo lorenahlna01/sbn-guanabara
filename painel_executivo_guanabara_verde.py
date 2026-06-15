@@ -1,3 +1,8 @@
+Aqui está o **script completo e consolidado**. Ele já inclui todas as funcionalidades que construímos ao longo da nossa conversa: a correção da URL (destrancada), a aba de Cronograma com Gráfico de Gantt, os mapas com agrupamento (apenas para atividades de campo), as análises avançadas, logística detalhada, exportação para CSV e filtros em cascata ajustados.
+
+Para usar, basta copiar todo o bloco de código abaixo e substituir o conteúdo do seu arquivo no Streamlit:
+
+```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -66,11 +71,11 @@ def obter_coordenadas(local):
     return [-22.84, -43.15] 
 
 # ==========================================
-# 2. CARREGAMENTO DA NOVA PLANILHA
+# 2. CARREGAMENTO E SANEAMENTO DOS DADOS
 # ==========================================
 @st.cache_data(ttl=60)
 def load_data():
-    url = "https://docs.google.com/spreadsheets/d/1qBJ-Dk_AEvZx8zPg5y2fsDV7VvO_arNy/export?format=xlsx"
+    url = "https://docs.google.com/spreadsheets/d/1H5TMFJvuDpX9EWr-qVJO2vQPTEGB82We/export?format=xlsx"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response:
@@ -107,16 +112,17 @@ def load_data():
             return 'Teórica'
         df_t["Tipo de Atividade"] = df_t["Tipo de Atividade"].apply(map_atividade)
 
-        # LIMPEZA
+        # LIMPEZA E FORMATAÇÃO
         df_t["Local"] = df_t["Local"].astype(str).str.strip().str.title()
         df_t["Status"] = df_t["Status"].astype(str).str.strip().str.title()
         df_t["Carga Horária (h)"] = pd.to_numeric(df_t["Carga Horária (h)"].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
         df_t["Nº de Participantes"] = pd.to_numeric(df_t["Nº de Participantes"], errors='coerce').fillna(0)
         df_t["KM Previsto"] = pd.to_numeric(df_t["KM Previsto"], errors='coerce').fillna(0)
         
+        # Filtra apenas linhas onde a coluna 'Turma' está preenchida
         df_t = df_t[df_t["Turma"].astype(str) != "nan"]
         
-        return df_t, "✅ Conectado à Nova Planilha via Google Sheets"
+        return df_t, "✅ Conectado à Planilha via Google Sheets"
     except Exception as e:
         return pd.DataFrame({
             "Eixo Temático": ["Erro"], "Local": ["Erro"], "Subtema": ["Erro"], 
@@ -138,6 +144,7 @@ with st.sidebar:
         "📋 GESTÃO DE TURMAS", 
         "🗺️ MAPA DE ATUAÇÃO", 
         "🚐 LOGÍSTICA", 
+        "📅 CRONOGRAMA",
         "📊 INDICADORES E METAS",
         "📈 ANÁLISE AVANÇADA"
     ])
@@ -158,7 +165,7 @@ if menu == "📌 VISÃO GERAL":
     atividades_total = len(df_f)
     atividades_concluidas = len(df_f[df_f["Status"].str.contains("Concluíd", case=False, na=False)])
     
-    # KPIs principais (Polos removido)
+    # KPIs principais
     c1, c2, c3 = st.columns(3)
     with c1: st.markdown(f'<div class="glass-card"><div class="kpi-title">Carga Horária Global</div><div class="kpi-value">{total_ch}h</div></div>', unsafe_allow_html=True)
     with c2: st.markdown(f'<div class="glass-card"><div class="kpi-title">Vagas (Planilha)</div><div class="kpi-value">{total_vagas}</div></div>', unsafe_allow_html=True)
@@ -172,7 +179,8 @@ if menu == "📌 VISÃO GERAL":
         df_radar = df_radar.dropna(subset=["Data"]).sort_values("Data").head(5)
         
         if not df_radar.empty:
-            st.dataframe(df_radar[["Data", "Local", "Subtema", "Tipo de Atividade"]], use_container_width=True, hide_index=True)
+            df_radar["Data Formatada"] = df_radar["Data"].dt.strftime('%d/%m/%Y')
+            st.dataframe(df_radar[["Data Formatada", "Local", "Subtema", "Tipo de Atividade"]], use_container_width=True, hide_index=True)
         else:
             st.info("Não há datas futuras preenchidas corretamente na planilha no momento.")
     else:
@@ -321,7 +329,64 @@ elif menu == "🚐 LOGÍSTICA":
     st.dataframe(df_log[colunas_log_visiveis], use_container_width=True, hide_index=True)
 
 # ==========================================
-# PÁGINA 5: INDICADORES E METAS
+# PÁGINA 5: CRONOGRAMA E GANTT
+# ==========================================
+elif menu == "📅 CRONOGRAMA":
+    st.title("📅 Cronograma e Linha do Tempo")
+    st.markdown("Acompanhe o agendamento das capacitações e a distribuição temporal do projeto.")
+    
+    df_crono = df_f.copy()
+    if "Data" in df_crono.columns:
+        df_crono["Data"] = pd.to_datetime(df_crono["Data"], errors="coerce")
+        df_crono = df_crono.dropna(subset=["Data"])
+    else:
+        df_crono = pd.DataFrame()
+
+    if df_crono.empty:
+        st.warning("⚠️ Não há datas válidas preenchidas na coluna 'Data' da sua planilha para gerar o cronograma. Preencha as datas no formato DD/MM/AAAA para habilitar esta visualização.")
+    else:
+        df_crono = df_crono.sort_values("Data")
+        
+        tab1, tab2 = st.tabs(["📊 Gráfico de Gantt", "🗓️ Agenda (Planilha Calendário)"])
+        
+        with tab1:
+            st.subheader("Linha do Tempo (Gantt)")
+            st.markdown("Visão visual do projeto. As atividades estão agrupadas por Eixo Temático.")
+            
+            df_crono["Dias de Duração"] = np.ceil(df_crono["Carga Horária (h)"].replace(0, 8) / 8)
+            df_crono["Data Fim"] = df_crono["Data"] + pd.to_timedelta(df_crono["Dias de Duração"], unit='d')
+            
+            fig_gantt = px.timeline(
+                df_crono,
+                x_start="Data",
+                x_end="Data Fim",
+                y="Subtema",
+                color="Eixo Temático",
+                color_discrete_map=COLOR_MAP,
+                hover_data=["Local", "Público-Alvo", "Carga Horária (h)", "Tipo de Atividade"],
+                template="plotly_dark",
+                height=600
+            )
+            fig_gantt.update_yaxes(autorange="reversed")
+            fig_gantt.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                showlegend=True
+            )
+            st.plotly_chart(fig_gantt, use_container_width=True)
+
+        with tab2:
+            st.subheader("Agenda Detalhada")
+            st.markdown("Lista sequencial de todas as atividades agendadas.")
+            
+            df_crono["Data Formatada"] = df_crono["Data"].dt.strftime('%d/%m/%Y')
+            colunas_agenda = ["Data Formatada", "Eixo Temático", "Subtema", "Tipo de Atividade", "Local", "Público-Alvo", "Status"]
+            colunas_visiveis = [col for col in colunas_agenda if col in df_crono.columns]
+            
+            st.dataframe(df_crono[colunas_visiveis], use_container_width=True, hide_index=True)
+
+# ==========================================
+# PÁGINA 6: INDICADORES E METAS
 # ==========================================
 elif menu == "📊 INDICADORES E METAS":
     st.title("📊 Indicadores de Resultados (Tabela 1 - BID)")
@@ -381,7 +446,7 @@ elif menu == "📊 INDICADORES E METAS":
             """, unsafe_allow_html=True)
 
 # ==========================================
-# PÁGINA 6: ANÁLISE AVANÇADA
+# PÁGINA 7: ANÁLISE AVANÇADA
 # ==========================================
 elif menu == "📈 ANÁLISE AVANÇADA":
     st.title("📈 Análise Avançada e Inteligência de Dados")
@@ -449,3 +514,5 @@ elif menu == "📈 ANÁLISE AVANÇADA":
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #64748B; font-size: 11px;'>Realização SEAS-RJ & BID</p>", unsafe_allow_html=True)
+
+```
