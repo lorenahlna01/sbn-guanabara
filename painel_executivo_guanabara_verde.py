@@ -1,8 +1,3 @@
-Aqui está o código completo e unificado em um único arquivo `app.py`. Ele contém todas as melhores práticas, correção de bugs, lógicas de filtros em cascata, mapas coloridos, gráficos de Gantt funcionais e conformidade com a LGPD.
-
-Basta copiar o código abaixo e colar no seu arquivo `app.py` para rodar perfeitamente no Streamlit Cloud:
-
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -244,7 +239,7 @@ if menu == "📌 VISÃO GERAL":
     with col_a:
         df_comp = df_f.groupby("Eixo Temático")[["Nº de Participantes", "Inscritos Real"]].sum().reset_index()
         fig_comp = go.Figure()
-        fig_comp.add_trace(go.Bar(name="Vagas Planejadas", x=df_comp["Eixo Temático"], y=df_comp["Nº de Participantes"], marker_color="#475569"))
+        fig_comp.add_trace(go.Bar(name="Vagas Planeadas", x=df_comp["Eixo Temático"], y=df_comp["Nº de Participantes"], marker_color="#475569"))
         fig_comp.add_trace(go.Bar(name="Inscrições Coletadas", x=df_comp["Eixo Temático"], y=df_comp["Inscritos Real"], marker_color="#10B981"))
         fig_comp.update_layout(barmode="group", template="plotly_dark", title="Metas de Mobilização (Vagas vs Inscrições)", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_comp, use_container_width=True)
@@ -421,5 +416,3 @@ elif menu == "📦 ENTREGAS":
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #64748B; font-size: 11px;'>Realização SEAS-RJ & BID</p>", unsafe_allow_html=True)
-
-```
