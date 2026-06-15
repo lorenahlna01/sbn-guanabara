@@ -215,3 +215,12 @@ df, df_crono_raw, status_conexao = load_data()
 with st.sidebar:
     st.markdown('<div class="logo-text">🌿 GUANABARA VERDE</div>', unsafe_allow_html=True)
     menu = st.radio("MENU PRINCIPAL", ["📌 VISÃO GERAL", "📋 GESTÃO OPERACIONAL", "🗺️ TERRITÓRIOS RH-V", "🚐 PAINEL LOGÍSTICO", "📅 CRONOGRAMA", "📦 ENTREGAS"])
+    st.markdown("---")
+    st.info(status_conexao)
+    
+    eixos_unicos = list(df["Eixo Temático"].unique())
+    f_eixo = st.sidebar.multiselect("FILTRAR POR EIXO", eixos_unicos, default=eixos_unicos)
+    df_f = df[df["Eixo Temático"].isin(f_eixo)]
+    
+    if st.sidebar.button("🔄 Atualizar Painel"):
+        st.cache_data.clear()
