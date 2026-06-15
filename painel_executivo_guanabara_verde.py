@@ -1,8 +1,3 @@
-Aqui está o **script completo e consolidado**. Ele já inclui todas as funcionalidades que construímos ao longo da nossa conversa: a correção da URL (destrancada), a aba de Cronograma com Gráfico de Gantt, os mapas com agrupamento (apenas para atividades de campo), as análises avançadas, logística detalhada, exportação para CSV e filtros em cascata ajustados.
-
-Para usar, basta copiar todo o bloco de código abaixo e substituir o conteúdo do seu arquivo no Streamlit:
-
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -514,5 +509,3 @@ elif menu == "📈 ANÁLISE AVANÇADA":
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #64748B; font-size: 11px;'>Realização SEAS-RJ & BID</p>", unsafe_allow_html=True)
-
-```
