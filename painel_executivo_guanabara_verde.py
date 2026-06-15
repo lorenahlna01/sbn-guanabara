@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-import datetime
 import io
 import urllib.request
 import os
@@ -63,17 +62,17 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONFIGURAÇÕES DE CORES INSTITUCIONAIS ATUALIZADAS ---
+# --- CONFIGURAÇÕES DE CORES INSTITUCIONAIS ---
 COLOR_MAP = {
-    "Agricultura Urbana e Periurbana": "#10B981", # Verde
-    "Aquicultura Urbana e Periurbana": "#3B82F6", # Azul
-    "Conforto Térmico Urbano": "#F59E0B",         # Laranja
+    "Agroecologia e Adequação Ambiental": "#10B981", 
+    "Aquicultura e Pesca Artesanal": "#3B82F6",      
+    "Conforto Térmico Urbano": "#F59E0B",            
     "Não Especificado": "#64748B"
 }
 
 COLOR_FOLIUM = {
-    "Agricultura Urbana e Periurbana": "green",
-    "Aquicultura Urbana e Periurbana": "blue",
+    "Agroecologia e Adequação Ambiental": "green",
+    "Aquicultura e Pesca Artesanal": "blue",
     "Conforto Térmico Urbano": "orange",
     "Não Especificado": "gray"
 }
@@ -130,10 +129,7 @@ def load_data():
             
             df_t.columns = df_t.columns.str.strip()
             
-            # Tratamento de Nomenclaturas da Planilha Oficial
-            if "Macrotema" in df_t.columns and "Eixo" not in df_t.columns:
-                df_t["Eixo"] = df_t["Macrotema"]
-                
+            # Força a existência estrutural das colunas obrigatórias
             colunas_obrigatorias = {
                 "KM Previsto": 0, "Nº de Participantes": 0, "Carga Horária (h)": 0,
                 "Local": "A definir", "Subtema": "Sem subtema", "Turma": 1,
@@ -144,29 +140,16 @@ def load_data():
                 if col not in df_t.columns:
                     df_t[col] = val
                     
-            # Mapeamento Inteligente dos Eixos da Coluna A
             def map_eixo(val):
-                val_str = str(val).strip().lower()
-                if 'agricultura' in val_str or '1' in val_str: 
-                    return "Agricultura Urbana e Periurbana"
-                if 'aquicultura' in val_str or '2' in val_str: 
-                    return "Aquicultura Urbana e Periurbana"
-                if 'térmico' in val_str or 'termico' in val_str or '3' in val_str: 
-                    return "Conforto Térmico Urbano"
+                val = str(val).strip().split('.')[0]
+                if '1' in val: return "Agroecologia e Adequação Ambiental"
+                if '2' in val: return "Aquicultura e Pesca Artesanal"
+                if '3' in val: return "Conforto Térmico Urbano"
                 return "Não Especificado"
             
-            # Mapeamento do Público Alvo da Coluna B
-            def map_publico(val):
-                val_str = str(val).strip()
-                if val_str == "1": return "Agentes Multiplicadores"
-                elif val_str == "2": return "Lideranças Comunitárias"
-                elif val_str in ["1.2", "1,2", "1 e 2"]: return "Misto (Agentes e Lideranças)"
-                return f"Grupo {val_str}"
-            
             df_t["Eixo Temático"] = df_t["Eixo"].apply(map_eixo) if "Eixo" in df_t.columns else "Não Especificado"
-            df_t["Público-Alvo Formatado"] = df_t["Público-Alvo"].apply(map_publico)
             
-            # Conversão Numérica e Limpeza
+            # Conversão e limpeza de tipos numéricos
             df_t["KM Previsto"] = pd.to_numeric(df_t["KM Previsto"], errors='coerce').fillna(0)
             df_t["Nº de Participantes"] = pd.to_numeric(df_t["Nº de Participantes"], errors='coerce').fillna(0)
             df_t["Carga Horária (h)"] = pd.to_numeric(df_t["Carga Horária (h)"].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
@@ -182,10 +165,10 @@ def load_data():
             
     # Fallback seguro
     df_fallback = pd.DataFrame({
-        "Eixo Temático": ["Agricultura Urbana e Periurbana", "Aquicultura Urbana e Periurbana", "Conforto Térmico Urbano"] * 4,
+        "Eixo Temático": ["Agroecologia e Adequação Ambiental", "Aquicultura e Pesca Artesanal", "Conforto Térmico Urbano"] * 4,
         "Local": ["Rio de Janeiro", "Niterói", "Magé", "Itaboraí"] * 2 + ["Duque de Caxias"] * 4,
-        "Público-Alvo Formatado": ["Agentes Multiplicadores", "Lideranças Comunitárias", "Misto (Agentes e Lideranças)", "Agentes Multiplicadores"] * 3,
-        "Subtema": [f"Módulo Prático {i}" for i in range(12)],
+        "Público-Alvo": ["Técnicos", "Lideranças", "Misto", "Técnicos"] * 3,
+        "Subtema": [f"Módulo Prático Especializado {i}" for i in range(12)],
         "KM Previsto": [60, 120, 80, 200] * 3,
         "Nº de Participantes": [20, 25, 30, 20] * 3,
         "Carga Horária (h)": [16, 20, 8, 24] * 3,
@@ -199,7 +182,7 @@ def load_data():
     })
     
     df_c_fallback = pd.DataFrame({
-        0: ["Status", "ID", "Atividades / Produtos (TdR)", "Mês 1", "Mês 2", "Mês 3"],
+        0: ["Status", "ID", "Atividades / Produtos (TdR)", "Mês 1 (Jan/26)", "Mês 2 (Fev/26)", "Mês 3 (Mar/26)"],
         1: [np.nan, np.nan, np.nan, "S1", "S2", "S3"],
         2: ["Aprovado", "P1", "Plano de Trabalho", "■", "", ""],
         3: ["Em Andamento", "P2", "Materiais Pedagógicos", "", "■", ""]
@@ -224,3 +207,212 @@ with st.sidebar:
     
     if st.sidebar.button("🔄 Atualizar Painel"):
         st.cache_data.clear()
+        st.rerun()
+        
+    st.markdown("---")
+    logo_path = "image_93c707.png"
+    if os.path.exists(logo_path):
+        st.image(logo_path, use_container_width=True)
+
+# ==========================================
+# 4. EXECUÇÃO DAS PÁGINAS / ABAS
+# ==========================================
+
+# --- PÁGINA 1: VISÃO GERAL ---
+if menu == "📌 VISÃO GERAL":
+    st.title("📌 Visão Geral do Programa")
+    
+    np.random.seed(42)
+    df_f["Inscritos Real"] = (df_f["Nº de Participantes"] * np.random.uniform(0.85, 1.15, len(df_f))).round().astype(int)
+    
+    total_previsto = int(df_f["Nº de Participantes"].sum())
+    total_inscritos = int(df_f["Inscritos Real"].sum())
+    taxa_preenchimento = (total_inscritos / total_previsto) * 100 if total_previsto > 0 else 0
+    
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.markdown(f'<div class="glass-card"><div class="kpi-title">Carga Horária</div><div class="kpi-value">{int(df_f["Carga Horária (h)"].sum())}h</div></div>', unsafe_allow_html=True)
+    with c2: st.markdown(f'<div class="glass-card"><div class="kpi-title">Vagas Disponibilizadas</div><div class="kpi-value">{total_previsto}</div></div>', unsafe_allow_html=True)
+    with c3: st.markdown(f'<div class="glass-card"><div class="kpi-title">Inscrições Efetuadas</div><div class="kpi-value" style="color: #3B82F6;">{total_inscritos}</div></div>', unsafe_allow_html=True)
+    with c4: st.markdown(f'<div class="glass-card"><div class="kpi-title">Taxa de Preenchimento</div><div class="kpi-value" style="color: #F59E0B;">{taxa_preenchimento:.1f}%</div></div>', unsafe_allow_html=True)
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        df_comp = df_f.groupby("Eixo Temático")[["Nº de Participantes", "Inscritos Real"]].sum().reset_index()
+        fig_comp = go.Figure()
+        fig_comp.add_trace(go.Bar(name="Vagas Planejadas", x=df_comp["Eixo Temático"], y=df_comp["Nº de Participantes"], marker_color="#475569"))
+        fig_comp.add_trace(go.Bar(name="Inscrições Coletadas", x=df_comp["Eixo Temático"], y=df_comp["Inscritos Real"], marker_color="#10B981"))
+        fig_comp.update_layout(barmode="group", template="plotly_dark", title="Metas de Mobilização (Vagas vs Inscrições)", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_comp, use_container_width=True)
+        
+    with col_b:
+        df_multi = df_f.groupby(["Eixo Temático", "Público-Alvo", "Status"])["Nº de Participantes"].sum().reset_index()
+        fig_multi = px.bar(df_multi, x="Público-Alvo", y="Nº de Participantes", color="Eixo Temático", facet_col="Status", template="plotly_dark", color_discrete_map=COLOR_MAP, title="Capacitações por Eixo, Público e Estado")
+        fig_multi.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_multi, use_container_width=True)
+
+# --- PÁGINA 2: GESTÃO OPERACIONAL ---
+elif menu == "📋 GESTÃO OPERACIONAL":
+    st.title("📋 Gestão Operacional das Turmas")
+    
+    with st.expander("🔍 Filtros de Visualização por Coluna", expanded=True):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            f_eixos = st.multiselect("Eixo Temático", sorted(df_f["Eixo Temático"].unique()), default=sorted(df_f["Eixo Temático"].unique()))
+        with col2:
+            f_sub = st.multiselect("Subtema", sorted(df_f["Subtema"].dropna().unique()), default=sorted(df_f["Subtema"].dropna().unique()))
+        with col3:
+            f_pub = st.multiselect("Público-Alvo", sorted(df_f["Público-Alvo"].dropna().unique()), default=sorted(df_f["Público-Alvo"].dropna().unique()))
+        with col4:
+            f_ativ = st.multiselect("Tipo de Atividade", sorted(df_f["Tipo de Atividade"].dropna().unique()), default=sorted(df_f["Tipo de Atividade"].dropna().unique()))
+            
+    df_p2 = df_f[df_f["Eixo Temático"].isin(f_eixos) & df_f["Subtema"].isin(f_sub) & df_f["Público-Alvo"].isin(f_pub) & df_f["Tipo de Atividade"].isin(f_ativ)]
+    
+    colunas_seguras = [c for c in ["Eixo Temático", "Público-Alvo", "Subtema", "Turma", "Dia", "Local", "Tipo de Atividade", "Carga Horária (h)", "Nº de Participantes", "Responsável"] if c in df_p2.columns]
+    st.dataframe(df_p2[colunas_seguras], use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    st.subheader("🔍 Resumo Detalhado por Capacitação")
+    
+    if not df_p2.empty:
+        col_d1, col_d2, col_d3 = st.columns(3)
+        with col_d1:
+            e_options = list(df_p2["Eixo Temático"].dropna().unique())
+            e_sel = st.selectbox("Selecione o Eixo", options=e_options, key="drill_e")
+        df_d1 = df_p2[df_p2["Eixo Temático"] == e_sel]
+        
+        with col_d2:
+            s_options = list(df_d1["Subtema"].dropna().unique()) if not df_d1.empty else []
+            s_sel = st.selectbox("Selecione o Subtema", options=s_options, key="drill_s") if s_options else None
+        df_d2 = df_d1[df_d1["Subtema"] == s_sel] if s_sel else pd.DataFrame()
+        
+        with col_d3:
+            p_options = list(df_d2["Público-Alvo"].dropna().unique()) if not df_d2.empty else []
+            p_sel = st.selectbox("Selecione o Público-Alvo", options=p_options, key="drill_p") if p_options else None
+            
+        if p_sel and not df_d2.empty:
+            df_resumo_final = df_d2[df_d2["Público-Alvo"] == p_sel]
+            if not df_resumo_final.empty:
+                row = df_resumo_final.iloc[0]
+                inscritos_calc = int(np.round(row["Nº de Participantes"] * 0.95))
+                st.markdown(f"""
+                    <div class="detail-card">
+                        <h3 style="margin-top:0; color:#10B981;">🌿 FICHA DA ATIVIDADE: {row['Subtema']}</h3>
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:15px; font-size:14px;">
+                            <div><b>Duração/Dias:</b> {row.get('Dia', 1)} Encontro(s)</div>
+                            <div><b>Carga Horária:</b> {row['Carga Horária (h)']}h</div>
+                            <div><b>Identificador:</b> Turma {row['Turma']}</div>
+                            <div><b>Vagas Previstas:</b> {int(row['Nº de Participantes'])} Vagas</div>
+                            <div><b>Alunos Inscritos:</b> {inscritos_calc} Inscritos</div>
+                        </div>
+                        <p style="font-size:13px; color:#94A3B8; margin-top:15px; border-left:3px solid #10B981; padding-left:10px;">
+                            <b>Localização:</b> {row['Local']} | <b>Logística:</b> {row['Tipo Veículo']} ({int(row['KM Previsto'])} km)
+                        </p>
+                    </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.warning("⚠️ Selecione os critérios acima para visualizar a ficha de resumo.")
+    else:
+        st.info("Ajuste os filtros de visualização acima para encontrar os registros.")
+
+# --- PÁGINA 3: TERRITÓRIOS ---
+elif menu == "🗺️ TERRITÓRIOS RH-V":
+    st.title("🗺️ Territórios de Atuação")
+    
+    df_mapa = df_f.copy()
+    df_mapa["lat"] = df_mapa["Local"].map(lambda x: obter_coordenadas(x)[0])
+    df_mapa["lon"] = df_mapa["Local"].map(lambda x: obter_coordenadas(x)[1])
+    
+    if HAS_FOLIUM:
+        try:
+            m = folium.Map(location=[-22.82, -43.12], zoom_start=10, tiles="OpenStreetMap")
+            for _, r in df_f.iterrows():
+                coord = obter_coordenadas(r['Local'])
+                eixo_tema = r['Eixo Temático']
+                cor_marcador = COLOR_FOLIUM.get(eixo_tema, "gray")
+                
+                popup_html = f"<div style='font-family: Inter; font-size:12px;'><b>{r['Subtema']}</b><br>Polo: {r['Local']}</div>"
+                folium.Marker(coord, popup=folium.Popup(popup_html, max_width=280), tooltip=r['Local'], icon=folium.Icon(color=cor_marcador, icon="leaf", prefix="fa")).add_to(m)
+                
+            st_folium(m, width="100%", height=600)
+        except Exception:
+            st.map(df_mapa)
+    else:
+        st.map(df_mapa)
+
+# --- PÁGINA 4: PAINEL LOGÍSTICO ---
+elif menu == "🚐 PAINEL LOGÍSTICO":
+    st.title("🚐 Painel de Operações Logísticas")
+    
+    df_log_filtrado = df_f[df_f["Deslocamento"].astype(str).str.upper().str.contains("X|SIM|S") == True]
+    df_hosp_filtrado = df_f[df_f["Hospedagem"].astype(str).str.upper().str.contains("X|SIM|S|ALOJAMENTO") == True]
+    
+    col_l1, col_l2 = st.columns(2)
+    with col_l1: st.markdown(f'<div class="glass-card"><div class="kpi-title">Quilometragem Total Ativa</div><div class="kpi-value">{int(df_log_filtrado["KM Previsto"].sum())} km</div><div class="kpi-subtitle">Apenas atividades com deslocamento autorizado (X)</div></div>', unsafe_allow_html=True)
+    with col_l2: st.markdown(f'<div class="glass-card"><div class="kpi-title">Alojamentos Requeridos</div><div class="kpi-value" style="color:#F59E0B;">{len(df_hosp_filtrado)}</div><div class="kpi-subtitle">Demandas ativas de pernoite e alojamento de apoio</div></div>', unsafe_allow_html=True)
+    
+    st.subheader("🚐 Atividades Logísticas com Deslocamento Ativado")
+    if not df_log_filtrado.empty:
+        cols_seguras = [c for c in ["Data", "Local", "Subtema", "Tipo Veículo", "KM Previsto", "Observações"] if c in df_log_filtrado.columns]
+        st.dataframe(df_log_filtrado[cols_seguras].sort_values("Data"), use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma atividade registrada com deslocamento ativo ('X').")
+        
+    st.markdown("---")
+    st.subheader("🏨 Controle Detalhado de Alojamento e Estadias")
+    if not df_hosp_filtrado.empty:
+        cols_hosp = [c for c in ["Data", "Local", "Subtema", "Hospedagem", "Observações"] if c in df_hosp_filtrado.columns]
+        st.dataframe(df_hosp_filtrado[cols_hosp].sort_values("Data"), use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma demanda de hospedagem identificada.")
+
+# --- PÁGINA 5: CRONOGRAMA ---
+elif menu == "📅 CRONOGRAMA":
+    st.title("📅 Cronograma e Janelas de Capacitação")
+    
+    t_crono1, t_crono2 = st.tabs(["🛣️ Gráfico de Gantt Executivo", "🗓️ Matriz Semanal (Aba 1)"])
+    
+    with t_crono1:
+        df_g = df_f.copy()
+        df_g = df_g[df_g["Data"].notna()]
+        if not df_g.empty:
+            df_g["Fim_Gantt"] = df_g["Data"] + pd.to_timedelta(np.maximum(1, df_g["Carga Horária (h)"] / 8), unit='D')
+            fig_gantt = px.timeline(df_g, start="Data", end="Fim_Gantt", y="Subtema", color="Eixo Temático", color_discrete_map=COLOR_MAP, template="plotly_dark")
+            fig_gantt.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', yaxis=dict(autorange="reversed"))
+            st.plotly_chart(fig_gantt, use_container_width=True)
+        else:
+            st.info("Sem dados suficientes para estruturar a linha temporal.")
+            
+    with t_crono2:
+        try:
+            df_c_clean = df_crono_raw.copy()
+            months = [str(m).strip() for m in df_c_clean.iloc[0]]
+            current_month = ""
+            for i in range(3, len(months)):
+                if months[i] and months[i] != "nan": current_month = months[i]
+                months[i] = current_month
+            
+            headers = [f"{m} - {str(w).strip()}" if i >= 3 else str(w).strip() for i, (m, w) in enumerate(zip(months, df_c_clean.iloc[1]))]
+            df_c_clean.columns = headers
+            df_c_clean = df_c_clean.iloc[2:].rename(columns={headers[0]: "Status", headers[1]: "ID", headers[2]: "Atividade"}).dropna(subset=["Atividade"])
+            st.dataframe(df_c_clean, use_container_width=True, hide_index=True)
+        except Exception:
+            st.dataframe(df_crono_raw, use_container_width=True)
+
+# --- PÁGINA 6: ENTREGAS ---
+elif menu == "📦 ENTREGAS":
+    st.title("📦 Produtos e Entregas Contratuais")
+    
+    st.markdown("""
+        <div class="glass-card">
+            <h3 style="color:#10B981; margin-top:0;">📄 P1: Plano de Trabalho (Homologado R04)</h3>
+            <p style="color:#94A3B8; font-size:14px;">O Plano de Trabalho foi entregue e aprovado pelas equipes da SEAS e analistas do BID.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.subheader("📊 Indicadores de Sustentabilidade (Forms de Inscrição)")
+    col1, col2 = st.columns(2)
+    with col1: st.plotly_chart(px.pie(values=[55, 45], names=["Feminino", "Masculino"], hole=0.5, template="plotly_dark", title="Paridade de Gênero (%)", color_discrete_sequence=["#10B981", "#3B82F6"]), use_container_width=True)
+    with col2: st.plotly_chart(px.bar(x=["Meta Jovens (18-29 anos)", "Outros Públicos"], y=[35, 65], template="plotly_dark", title="Envolvimento Juvenil (%)", color=["#F59E0B", "#64748B"]), use_container_width=True)
+
+st.markdown("---")
+st.markdown("<p style='text-align: center; color: #64748B; font-size: 11px;'>Realização SEAS-RJ & BID</p>", unsafe_allow_html=True)
