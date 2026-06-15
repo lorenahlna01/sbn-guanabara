@@ -116,7 +116,12 @@ def map_publico(val):
 def fetch_excel_from_github(url):
     """Lê diretamente o ficheiro binário .xlsx de um repositório público do GitHub"""
     try:
-        data_bytes = urllib.request.urlopen(url).read()
+        # Força o cabeçalho User-Agent para evitar bloqueios de segurança simples
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        data_bytes = urllib.request.urlopen(req).read()
         xls = pd.ExcelFile(io.BytesIO(data_bytes))
         
         # Identifica as duas abas contidas no xlsx de forma dinâmica
@@ -165,7 +170,7 @@ def load_project_data(github_url=None, use_github=False):
         if df_t is not None:
             return df_t, df_c, status
         else:
-            st.sidebar.warning(f"Falha de ligação: {status}. A reverter para ficheiros locais...")
+            st.sidebar.warning(f"Falha de ligação: {status}. A reverter para recursos locais...")
 
     # Tentativa de leitura de ficheiros CSV locais gerados a partir da folha de cálculo principal
     path_turmas = "BID-CRONOGRAMA-GESTAO-TURMAS-CAPACITA-SBN-R02.xlsx - Gestão de Turma.csv"
@@ -245,15 +250,18 @@ if origem_dados == "Sincronizar via GitHub":
     use_github = True
     github_url = st.sidebar.text_input(
         "Link raw do Excel no GitHub (.xlsx):", 
-        value="https://github.com/grupomyr/sbn-guanabara/raw/main/BID-CRONOGRAMA-GESTAO-TURMAS-CAPACITA-SBN-R02.xlsx",
+        value="https://raw.githubusercontent.com/grupomyr/sbn-guanabara/main/BID-CRONOGRAMA-GESTAO-TURMAS-CAPACITA-SBN-R02.xlsx",
         help="Insira o link raw que aponta diretamente para o seu repositório Git onde está o ficheiro .xlsx"
     )
     if st.sidebar.button("🔄 Forçar Sincronização"):
         st.cache_data.clear()
         st.sidebar.success("Cache limpo! À procura de nova versão da folha de cálculo...")
 
-# Carregamento dos dados do projeto
-df_raw_turmas, df_raw_crono = load_project_data(github_url, use_github)
+# Carregamento seguro dos dados do projeto (Descompactação de 3 valores corrigida!)
+df_raw_turmas, df_raw_crono, status_carregamento = load_project_data(github_url, use_github)
+
+# Mostra o status real da fonte de dados na sidebar
+st.sidebar.info(f"Fonte Ativa: {status_carregamento}")
 
 # Sanitização e higienização da aba Gestão de Turma
 df_turmas = df_raw_turmas.copy()
