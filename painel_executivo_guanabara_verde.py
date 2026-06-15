@@ -9,7 +9,6 @@ import urllib.request
 # ==========================================
 # ⚙️ CONFIGURAÇÕES (PREENCHA DEPOIS)
 # ==========================================
-# Quando tiver o Forms, cole o link de exportação aqui.
 URL_FORMS_RESPOSTAS = "" 
 URL_DRIVE_GERAL = "https://drive.google.com/drive/my-drive"
 
@@ -24,13 +23,13 @@ except ImportError:
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
-    page_title="Guanabara Verde | Gestão", 
+    page_title="Guanabara Verde | Gestão Estratégica", 
     page_icon="🌿", 
     layout="wide", 
     initial_sidebar_state="expanded"
 )
 
-# --- ESTILO CSS ---
+# --- ESTILO CSS EXECUTIVO ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -67,11 +66,11 @@ def obter_coordenadas(local):
     return [-22.84, -43.15] 
 
 # ==========================================
-# 2. CARREGAMENTO E SANEAMENTO SEVERO
+# 2. CARREGAMENTO DA NOVA PLANILHA
 # ==========================================
 @st.cache_data(ttl=60)
 def load_data():
-    url = "https://docs.google.com/spreadsheets/d/1H5TMFJvuDpX9EWr-qVJO2vQPTEGB82We/export?format=xlsx"
+    url = "https://docs.google.com/spreadsheets/d/1qBJ-Dk_AEvZx8zPg5y2fsDV7VvO_arNy/export?format=xlsx"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response:
@@ -85,13 +84,13 @@ def load_data():
         colunas_obrig = [
             "KM Previsto", "Nº de Participantes", "Carga Horária (h)", "Local", 
             "Subtema", "Turma", "Status", "Tipo de Atividade", "Tipo Veículo", 
-            "Deslocamento", "Hospedagem", "Público-Alvo", "Link Evidências", "Observações"
+            "Deslocamento", "Hospedagem", "Público-Alvo", "Link Evidências", "Observações", "Data"
         ]
         for col in colunas_obrig:
             if col not in df_t.columns: 
                 df_t[col] = "0" if "Nº" in col or "KM" in col or "Carga" in col else "Não Informado"
 
-        # 1. PADRONIZAÇÃO DE EIXOS
+        # PADRONIZAÇÃO DE EIXOS
         def map_eixo(val):
             val = str(val).strip().lower()
             if '1' in val or 'agricultura' in val or 'agroecologia' in val: return "Agricultura Urbana e Periurbana"
@@ -100,7 +99,7 @@ def load_data():
             return "Não Especificado"
         df_t["Eixo Temático"] = df_t["Eixo"].apply(map_eixo) if "Eixo" in df_t.columns else "Não Especificado"
 
-        # 2. PADRONIZAÇÃO DE TIPO DE ATIVIDADE
+        # PADRONIZAÇÃO DE TIPO DE ATIVIDADE
         def map_atividade(val):
             val = str(val).lower()
             if 'prática' in val or 'pratica' in val or 'oficina' in val: return 'Prática'
@@ -108,26 +107,23 @@ def load_data():
             return 'Teórica'
         df_t["Tipo de Atividade"] = df_t["Tipo de Atividade"].apply(map_atividade)
 
-        # 3. LIMPEZA DE POLOS E STATUS PARA NÃO INFLAR OS NÚMEROS
+        # LIMPEZA
         df_t["Local"] = df_t["Local"].astype(str).str.strip().str.title()
         df_t["Status"] = df_t["Status"].astype(str).str.strip().str.title()
-
-        # 4. LIMPEZA NUMÉRICA
         df_t["Carga Horária (h)"] = pd.to_numeric(df_t["Carga Horária (h)"].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
         df_t["Nº de Participantes"] = pd.to_numeric(df_t["Nº de Participantes"], errors='coerce').fillna(0)
         df_t["KM Previsto"] = pd.to_numeric(df_t["KM Previsto"], errors='coerce').fillna(0)
         
-        # Lê todas as linhas válidas com base no número da turma
         df_t = df_t[df_t["Turma"].astype(str) != "nan"]
         
-        return df_t, "✅ Conectado via Google Sheets"
+        return df_t, "✅ Conectado à Nova Planilha via Google Sheets"
     except Exception as e:
         return pd.DataFrame({
             "Eixo Temático": ["Erro"], "Local": ["Erro"], "Subtema": ["Erro"], 
             "Nº de Participantes": [0], "Carga Horária (h)": [0], "Status": ["Planejada"], 
             "Tipo de Atividade": ["Teórica"], "Turma": [1], "Público-Alvo": [""], 
             "Tipo Veículo": [""], "KM Previsto": [0], "Deslocamento": [""], 
-            "Hospedagem": [""], "Observações": [""]
+            "Hospedagem": [""], "Observações": [""], "Data": [""]
         }), f"❌ Falha de Conexão: {e}"
 
 df_f, status_conexao = load_data()
@@ -142,7 +138,8 @@ with st.sidebar:
         "📋 GESTÃO DE TURMAS", 
         "🗺️ MAPA DE ATUAÇÃO", 
         "🚐 LOGÍSTICA", 
-        "📊 INDICADORES E METAS"
+        "📊 INDICADORES E METAS",
+        "📈 ANÁLISE AVANÇADA"
     ])
     st.markdown("---")
     st.info(status_conexao)
@@ -158,17 +155,30 @@ if menu == "📌 VISÃO GERAL":
     
     total_ch = int(df_f["Carga Horária (h)"].sum())
     total_vagas = int(df_f["Nº de Participantes"].sum())
-    polos_unicos = len(df_f["Local"].unique())
-    
-    # Cálculo real de progresso
     atividades_total = len(df_f)
     atividades_concluidas = len(df_f[df_f["Status"].str.contains("Concluíd", case=False, na=False)])
     
-    c1, c2, c3, c4 = st.columns(4)
+    # KPIs principais (Polos removido)
+    c1, c2, c3 = st.columns(3)
     with c1: st.markdown(f'<div class="glass-card"><div class="kpi-title">Carga Horária Global</div><div class="kpi-value">{total_ch}h</div></div>', unsafe_allow_html=True)
     with c2: st.markdown(f'<div class="glass-card"><div class="kpi-title">Vagas (Planilha)</div><div class="kpi-value">{total_vagas}</div></div>', unsafe_allow_html=True)
-    with c3: st.markdown(f'<div class="glass-card"><div class="kpi-title">Polos de Atuação</div><div class="kpi-value" style="color: #3B82F6;">{polos_unicos}</div></div>', unsafe_allow_html=True)
-    with c4: st.markdown(f'<div class="glass-card"><div class="kpi-title">Progresso (Concluídas)</div><div class="kpi-value" style="color: #F59E0B;">{atividades_concluidas} / {atividades_total}</div></div>', unsafe_allow_html=True)
+    with c3: st.markdown(f'<div class="glass-card"><div class="kpi-title">Atividades Concluídas</div><div class="kpi-value" style="color: #F59E0B;">{atividades_concluidas} / {atividades_total}</div></div>', unsafe_allow_html=True)
+    
+    # Radar de Próximas Atividades
+    st.markdown("### 🗓️ Radar: Próximas Atividades Planejadas")
+    if "Data" in df_f.columns:
+        df_radar = df_f[df_f["Status"].str.contains("Planejada", case=False, na=False)].copy()
+        df_radar["Data"] = pd.to_datetime(df_radar["Data"], errors="coerce")
+        df_radar = df_radar.dropna(subset=["Data"]).sort_values("Data").head(5)
+        
+        if not df_radar.empty:
+            st.dataframe(df_radar[["Data", "Local", "Subtema", "Tipo de Atividade"]], use_container_width=True, hide_index=True)
+        else:
+            st.info("Não há datas futuras preenchidas corretamente na planilha no momento.")
+    else:
+        st.info("A coluna 'Data' precisa estar preenchida para ativar o radar.")
+
+    st.markdown("---")
     
     col_a, col_b = st.columns(2)
     with col_a:
@@ -186,7 +196,7 @@ if menu == "📌 VISÃO GERAL":
         st.plotly_chart(fig_ativ, use_container_width=True)
 
 # ==========================================
-# PÁGINA 2: GESTÃO E FILTROS EM CASCATA
+# PÁGINA 2: GESTÃO E EXPORTAÇÃO
 # ==========================================
 elif menu == "📋 GESTÃO DE TURMAS":
     st.title("📋 Gestão e Filtros de Turmas")
@@ -206,31 +216,50 @@ elif menu == "📋 GESTÃO DE TURMAS":
         if f_tipo: df_p2 = df_p2[df_p2["Tipo de Atividade"].isin(f_tipo)]
             
     with col3:
-        opcoes_polo = sorted(df_p2["Local"].dropna().unique())
-        f_polo = st.multiselect("Polo (Local)", options=opcoes_polo)
-        if f_polo: df_p2 = df_p2[df_p2["Local"].isin(f_polo)]
+        opcoes_pub = sorted(df_p2["Público-Alvo"].dropna().unique())
+        f_pub = st.multiselect("Público-Alvo", options=opcoes_pub)
+        if f_pub: df_p2 = df_p2[df_p2["Público-Alvo"].isin(f_pub)]
             
     st.markdown("---")
     if not df_p2.empty:
         st.success(f"✅ {len(df_p2)} atividades encontradas.")
-        colunas_desejadas = ["Turma", "Eixo Temático", "Subtema", "Tipo de Atividade", "Local", "Público-Alvo", "Carga Horária (h)", "Status"]
+        colunas_desejadas = ["Turma", "Eixo Temático", "Subtema", "Tipo de Atividade", "Local", "Público-Alvo", "Carga Horária (h)", "Status", "Data"]
         colunas_visiveis = [col for col in colunas_desejadas if col in df_p2.columns]
+        
         st.dataframe(df_p2[colunas_visiveis], use_container_width=True, hide_index=True)
+        
+        # Botão de Exportação
+        csv = df_p2[colunas_visiveis].to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Baixar Tabela Filtrada (CSV)",
+            data=csv,
+            file_name='atividades_filtradas.csv',
+            mime='text/csv',
+        )
     else:
-        st.warning("⚠️ Nenhuma atividade encontrada com essa combinação. Tente limpar algumas seleções.")
+        st.warning("⚠️ Nenhuma atividade encontrada com essa combinação.")
 
 # ==========================================
-# PÁGINA 3: MAPA DE ATUAÇÃO COM CLUSTER
+# PÁGINA 3: MAPA DE ATUAÇÃO (CAMPO)
 # ==========================================
 elif menu == "🗺️ MAPA DE ATUAÇÃO":
-    st.title("🗺️ Mapeamento Territorial e Oficinas")
-    st.markdown(f"Visualização de todas as **{len(df_f)} atividades**. Clique nos círculos com números para expandir as atividades agrupadas no mesmo polo.")
+    st.title("🗺️ Mapeamento Territorial de Campo")
+    
+    # Exibe apenas atividades práticas e visitas técnicas
+    df_mapa = df_f[df_f["Tipo de Atividade"].isin(['Prática', 'Visita Técnica'])].copy()
+    
+    opcoes_mapa = ["Todas as Atividades de Campo"] + sorted(df_mapa["Tipo de Atividade"].unique().tolist())
+    filtro_mapa = st.selectbox("🔍 Selecione o que deseja visualizar no mapa:", options=opcoes_mapa)
+    
+    if filtro_mapa != "Todas as Atividades de Campo":
+        df_mapa = df_mapa[df_mapa["Tipo de Atividade"] == filtro_mapa]
+
+    st.markdown(f"Visualizando **{len(df_mapa)} atividades** (Aulas Teóricas ocultadas). Clique nos círculos com números para expandir.")
     
     st.markdown("""
         <div style="display:flex; gap: 20px; font-size:14px; color:#94A3B8; margin-bottom:15px;">
-            <div>📖 Teóricas</div>
             <div>🔧 <b>Oficinas/Práticas</b></div>
-            <div>🚌 Visitas Técnicas</div>
+            <div>🚌 <b>Visitas Técnicas</b></div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -238,15 +267,12 @@ elif menu == "🗺️ MAPA DE ATUAÇÃO":
         m = folium.Map(location=[-22.82, -43.12], zoom_start=9, tiles="CartoDB dark_matter")
         marker_cluster = MarkerCluster().add_to(m)
         
-        for _, r in df_f.iterrows():
+        for _, r in df_mapa.iterrows():
             lat, lon = obter_coordenadas(r['Local'])
             cor = COLOR_MAP.get(r['Eixo Temático'], "gray")
             tipo = str(r['Tipo de Atividade'])
             
-            if tipo == 'Prática': icone_fa = "wrench"
-            elif tipo == 'Visita Técnica': icone_fa = "bus"
-            else: icone_fa = "book"
-                
+            icone_fa = "wrench" if tipo == 'Prática' else "bus"
             obs = r.get('Observações', '')
             obs_texto = obs if str(obs).strip() and str(obs) != "nan" else "Nenhuma observação registrada."
             
@@ -273,8 +299,7 @@ elif menu == "🗺️ MAPA DE ATUAÇÃO":
             
         st_folium(m, width="100%", height=600)
     else:
-        st.error("Biblioteca Folium não instalada. Exibindo mapa nativo simples.")
-        st.map(pd.DataFrame({"lat": df_f["Local"].map(lambda x: obter_coordenadas(x)[0]), "lon": df_f["Local"].map(lambda x: obter_coordenadas(x)[1])}))
+        st.error("Biblioteca Folium não instalada.")
 
 # ==========================================
 # PÁGINA 4: LOGÍSTICA
@@ -289,13 +314,14 @@ elif menu == "🚐 LOGÍSTICA":
     with col1: st.markdown(f'<div class="glass-card"><div class="kpi-title">Demandas de Transporte (Total KM)</div><div class="kpi-value">{int(df_f["KM Previsto"].sum())} km</div></div>', unsafe_allow_html=True)
     with col2: st.markdown(f'<div class="glass-card"><div class="kpi-title">Atividades com Logística Ativa</div><div class="kpi-value">{len(df_log)}</div></div>', unsafe_allow_html=True)
     
-    colunas_logistica_desejadas = ["Local", "Público-Alvo", "Subtema", "Tipo de Atividade", "Tipo Veículo", "KM Previsto", "Deslocamento", "Hospedagem", "Observações"]
+    # Eixo Temático adicionado no início
+    colunas_logistica_desejadas = ["Eixo Temático", "Local", "Público-Alvo", "Subtema", "Tipo de Atividade", "Tipo Veículo", "KM Previsto", "Deslocamento", "Hospedagem", "Observações"]
     colunas_log_visiveis = [col for col in colunas_logistica_desejadas if col in df_log.columns]
     
     st.dataframe(df_log[colunas_log_visiveis], use_container_width=True, hide_index=True)
 
 # ==========================================
-# PÁGINA 5: INDICADORES E METAS (GAC/BID)
+# PÁGINA 5: INDICADORES E METAS
 # ==========================================
 elif menu == "📊 INDICADORES E METAS":
     st.title("📊 Indicadores de Resultados (Tabela 1 - BID)")
@@ -353,6 +379,73 @@ elif menu == "📊 INDICADORES E METAS":
                 </ul>
             </div>
             """, unsafe_allow_html=True)
+
+# ==========================================
+# PÁGINA 6: ANÁLISE AVANÇADA
+# ==========================================
+elif menu == "📈 ANÁLISE AVANÇADA":
+    st.title("📈 Análise Avançada e Inteligência de Dados")
+    st.markdown("Cruzamentos estratégicos para tomada de decisão e relatórios executivos (BID).")
+
+    st.markdown("---")
+    st.subheader("🔥 Distribuição de Esforço (Carga Horária)")
+    st.markdown("Identifique rapidamente onde o maior volume de horas do projeto está concentrado.")
+    
+    if not df_f.empty:
+        pivot_df = df_f.pivot_table(
+            index="Eixo Temático", 
+            columns="Público-Alvo", 
+            values="Carga Horária (h)", 
+            aggfunc="sum"
+        ).fillna(0)
+        
+        fig_heat = px.imshow(
+            pivot_df, 
+            text_auto=True, 
+            aspect="auto", 
+            color_continuous_scale="Greens", 
+            template="plotly_dark",
+            labels=dict(color="Horas Totais")
+        )
+        fig_heat.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_heat, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("🚐 Eficiência Logística Sustentável (KM / Participante)")
+    st.markdown("Avalia o impacto logístico. Atividades no topo da lista possuem **alto custo de deslocamento para baixo volume de pessoas**.")
+    
+    df_eff = df_f[df_f["KM Previsto"] > 0].copy()
+    if not df_eff.empty:
+        df_eff["KM por Participante"] = np.where(
+            df_eff["Nº de Participantes"] > 0, 
+            (df_eff["KM Previsto"] / df_eff["Nº de Participantes"]).round(1), 
+            0
+        )
+        
+        df_eff_top = df_eff.sort_values("KM por Participante", ascending=False).head(5)
+        colunas_eff = ["Eixo Temático", "Local", "Subtema", "KM Previsto", "Nº de Participantes", "KM por Participante"]
+        
+        col_view = [col for col in colunas_eff if col in df_eff_top.columns]
+        st.dataframe(df_eff_top[col_view], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma atividade com quilometragem prevista para calcular eficiência.")
+
+    st.markdown("---")
+    st.subheader("⚠️ Diagnóstico Operacional Automático")
+    
+    riscos = 0
+    turmas_ociosas = df_f[df_f["Nº de Participantes"] < 10]
+    if len(turmas_ociosas) > 0:
+        st.warning(f"**Risco de Ociosidade:** Existem {len(turmas_ociosas)} atividades planejadas com menos de 10 participantes.")
+        riscos += 1
+        
+    ch_zerada = df_f[df_f["Carga Horária (h)"] <= 0]
+    if len(ch_zerada) > 0:
+        st.error(f"**Dados Incompletos:** Foram encontradas {len(ch_zerada)} atividades com Carga Horária zerada ou não preenchida na planilha.")
+        riscos += 1
+        
+    if riscos == 0:
+        st.success("✅ **Excelente!** Nenhum risco operacional ou falha de preenchimento crítico foi detectado nos dados atuais.")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #64748B; font-size: 11px;'>Realização SEAS-RJ & BID</p>", unsafe_allow_html=True)
