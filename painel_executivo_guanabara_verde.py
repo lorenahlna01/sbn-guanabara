@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilização CSS personalizada para um visual "premium dark mode" executivo
+# Estilização CSS personalizada
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -34,7 +34,6 @@ st.markdown("""
             border-right: 1px solid #1E293B;
         }
         
-        /* KPI Cards Executivos */
         .kpi-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -112,15 +111,25 @@ def fetch_excel_from_github(url):
         data_bytes = urllib.request.urlopen(url).read()
         xls = pd.ExcelFile(io.BytesIO(data_bytes))
         sheet_names = xls.sheet_names
-        sheet_crono = [s for s in sheet_names if "cronogram" in s.lower()][0]
-        sheet_turmas = [s for s in sheet_names if "turma" in s.lower() or "gest" in s.lower()][0]
-        df_t = pd.read_excel(xls, sheet_name=sheet_turmas)
-        df_c = pd.read_excel(xls, sheet_name=sheet_crono, header=None)
-        return df_t, df_c, "Sincronizado com GitHub"
+        
+        # Tenta encontrar as abas corretas
+        sheet_turmas = [s for s in sheet_names if "turma" in s.lower() or "gest" in s.lower()]
+        if not sheet_turmas:
+            return None, None
+        
+        df_t = pd.read_excel(xls, sheet_name=sheet_turmas[0])
+        
+        # Cronograma (opcional para o calendário novo, mas mantido para compatibilidade)
+        sheet_crono = [s for s in sheet_names if "cronogram" in s.lower()]
+        df_c = pd.read_excel(xls, sheet_name=sheet_crono[0], header=None) if sheet_crono else pd.DataFrame()
+        
+        return df_t, df_c
     except Exception as e:
-        return None, None, f"Erro ao acessar o GitHub: {str(e)}"
+        st.error(f"Erro ao carregar dados do GitHub: {e}")
+        return None, None
 
 def get_mock_data():
+    """Dados de fallback caso o GitHub falhe"""
     df_t = pd.DataFrame({
         "Eixo": [1, 2, 3] * 10,
         "Público-Alvo": ["1", "2", "1.2"] * 10,
@@ -141,31 +150,40 @@ def get_mock_data():
         "Data": [datetime.date(2026, 7, 1) + datetime.timedelta(days=i) for i in range(30)]
     })
     coords = {
-        "Rio de Janeiro": [-22.9068, -43.1729],
-        "Niterói": [-22.8833, -43.1167],
-        "Magé": [-22.6528, -43.0403],
-        "Itaboraí": [-22.7444, -42.8594],
-        "Duque de Caxias": [-22.7856, -43.3117],
-        "São Gonçalo": [-22.8269, -43.0539],
-        "Local a definir": [-22.9068, -43.1729]
+        "Rio de Janeiro": [-22.9068, -43.1729], "Niterói": [-22.8833, -43.1167],
+        "Magé": [-22.6528, -43.0403], "Itaboraí": [-22.7444, -42.8594],
+        "Duque de Caxias": [-22.7856, -43.3117], "São Gonçalo": [-22.8269, -43.0539]
     }
     df_t["lat"] = df_t["Local"].map(lambda x: coords.get(x, [-22.9068, -43.1729])[0])
     df_t["lon"] = df_t["Local"].map(lambda x: coords.get(x, [-22.9068, -43.1729])[1])
-    
-    df_c = pd.DataFrame({
-        0: ["Aprovado", "Em Andamento", "Planejado"],
-        1: ["P1", "P3", "P5"],
-        2: ["Fase de Planejamento Inicial", "Capacitação Prática em Campo", "Sistematização de Práticas"]
-    })
-    return df_t, df_c
+    return df_t, pd.DataFrame()
 
-def load_project_data(github_url=None, use_github=False):
-    if use_github and github_url:
-        df_t, df_c, status = fetch_excel_from_github(github_url)
-        if df_t is not None:
-            return df_t, df_c, status
-    df_t, df_c = get_mock_data()
-    return df_t, df_c, "Dados Simulados (Backup)"
+# --- CARREGAMENTO DE DADOS ---
+GITHUB_XLSX_URL = "https://github.com/grupomyr/sbn-guanabara/raw/main/BID-CRONOGRAMA-GESTAO-TURMAS-CAPACITA-SBN-R02.xlsx"
+
+df_raw_turmas, df_raw_crono = fetch_excel_from_github(GITHUB_XLSX_URL)
+
+if df_raw_turmas is None:
+    st.sidebar.warning("Usando dados simulados (Falha ao conectar ao GitHub)")
+    df_raw_turmas, df_raw_crono = get_mock_data()
+
+df_turmas = df_raw_turmas.copy()
+
+# Sanitização básica de colunas
+if "Eixo" in df_turmas.columns:
+    df_turmas["Eixo Temático"] = df_turmas["Eixo"].apply(map_eixo_name)
+if "Público-Alvo" in df_turmas.columns:
+    df_turmas["Público-Alvo Formatado"] = df_turmas["Público-Alvo"].apply(map_publico)
+
+# Coordenadas padrão para o mapa caso não existam
+if "lat" not in df_turmas.columns:
+    coords = {
+        "Rio de Janeiro": [-22.9068, -43.1729], "Niterói": [-22.8833, -43.1167],
+        "Magé": [-22.6528, -43.0403], "Itaboraí": [-22.7444, -42.8594],
+        "Duque de Caxias": [-22.7856, -43.3117], "São Gonçalo": [-22.8269, -43.0539]
+    }
+    df_turmas["lat"] = df_turmas["Local"].map(lambda x: coords.get(x, [-22.9068, -43.1729])[0])
+    df_turmas["lon"] = df_turmas["Local"].map(lambda x: coords.get(x, [-22.9068, -43.1729])[1])
 
 # Sidebar Branding
 st.sidebar.markdown("""
@@ -177,16 +195,6 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### ⚙️ Canal de Dados")
-origem_dados = st.sidebar.selectbox("Origem do Ficheiro:", ["Arquivos Locais/CSVs", "Sincronizar via GitHub"])
-
-github_url = "https://github.com/grupomyr/sbn-guanabara/raw/main/BID-CRONOGRAMA-GESTAO-TURMAS-CAPACITA-SBN-R02.xlsx"
-use_github = (origem_dados == "Sincronizar via GitHub")
-
-df_raw_turmas, df_raw_crono = load_project_data(github_url, use_github)
-df_turmas = df_raw_turmas.copy()
-df_turmas["Eixo Temático"] = df_turmas["Eixo"].apply(map_eixo_name)
-df_turmas["Público-Alvo Formatado"] = df_turmas["Público-Alvo"].apply(map_publico)
 
 # Navegação Executiva
 menu = [
@@ -202,7 +210,7 @@ choice = st.sidebar.radio("Navegação Executiva:", menu)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Filtros Globais")
-eixos_disponiveis = list(df_turmas["Eixo Temático"].unique())
+eixos_disponiveis = list(df_turmas["Eixo Temático"].unique()) if "Eixo Temático" in df_turmas.columns else []
 f_eixo = st.sidebar.multiselect("Filtrar por Eixo Temático:", options=eixos_disponiveis, default=eixos_disponiveis)
 df_t_filtered = df_turmas[df_turmas["Eixo Temático"].isin(f_eixo)]
 
@@ -213,151 +221,100 @@ if choice == "📌 Visão Geral":
     
     st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns(5)
-    with c1: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Carga Horária</div><div class="kpi-value">{int(df_t_filtered["Carga Horária (h)"].sum())}h</div><div class="kpi-subtitle">Total Planejado</div></div>', unsafe_allow_html=True)
+    with c1: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Carga Horária</div><div class="kpi-value">{int(df_t_filtered["Carga Horária (h)"].sum()) if "Carga Horária (h)" in df_t_filtered.columns else 0}h</div><div class="kpi-subtitle">Total Planejado</div></div>', unsafe_allow_html=True)
     with c2: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Dias de Aula</div><div class="kpi-value">{len(df_t_filtered)}</div><div class="kpi-subtitle">Frentes Operacionais</div></div>', unsafe_allow_html=True)
-    with c3: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Alunos Previstos</div><div class="kpi-value">{int(df_t_filtered["Nº de Participantes"].sum())}</div><div class="kpi-subtitle">Pessoas Mobilizadas</div></div>', unsafe_allow_html=True)
-    with c4: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Logística (KM)</div><div class="kpi-value">{int(df_t_filtered["KM Previsto"].sum())} km</div><div class="kpi-subtitle">Deslocamento</div></div>', unsafe_allow_html=True)
-    with c5: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Bases e Espaços</div><div class="kpi-value">{len(df_t_filtered["Local"].unique())}</div><div class="kpi-subtitle">Frentes em Campo</div></div>', unsafe_allow_html=True)
+    with c3: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Alunos Previstos</div><div class="kpi-value">{int(df_t_filtered["Nº de Participantes"].sum()) if "Nº de Participantes" in df_t_filtered.columns else 0}</div><div class="kpi-subtitle">Pessoas Mobilizadas</div></div>', unsafe_allow_html=True)
+    with c4: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Logística (KM)</div><div class="kpi-value">{int(df_t_filtered["KM Previsto"].sum()) if "KM Previsto" in df_t_filtered.columns else 0} km</div><div class="kpi-subtitle">Deslocamento</div></div>', unsafe_allow_html=True)
+    with c5: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Bases e Espaços</div><div class="kpi-value">{len(df_t_filtered["Local"].unique()) if "Local" in df_t_filtered.columns else 0}</div><div class="kpi-subtitle">Frentes em Campo</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     g1, g2 = st.columns([3, 2])
     with g1:
         st.subheader("Público-Alvo por Eixo Temático")
-        fig = px.bar(df_t_filtered, x="Eixo Temático", y="Nº de Participantes", color="Público-Alvo Formatado", barmode="group", template="plotly_dark", color_discrete_sequence=px.colors.qualitative.Safe)
-        st.plotly_chart(fig, use_container_width=True)
+        if not df_t_filtered.empty:
+            fig = px.bar(df_t_filtered, x="Eixo Temático", y="Nº de Participantes", color="Público-Alvo Formatado", barmode="group", template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
     with g2:
         st.subheader("Distribuição de Carga Horária")
-        fig_pie = px.pie(df_t_filtered, names="Eixo Temático", values="Carga Horária (h)", hole=0.4, template="plotly_dark", color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        if not df_t_filtered.empty:
+            fig_pie = px.pie(df_t_filtered, names="Eixo Temático", values="Carga Horária (h)", hole=0.4, template="plotly_dark")
+            st.plotly_chart(fig_pie, use_container_width=True)
 
 # --- PÁGINA 2: GESTÃO DE TURMAS ---
 elif choice == "📚 Gestão de Turmas":
     st.title("📚 Detalhamento das Turmas e Atividades")
-    st.markdown("Lista completa de capacitações planejadas para o projeto.")
-    st.dataframe(df_t_filtered.drop(columns=['lat', 'lon']), use_container_width=True)
+    st.dataframe(df_t_filtered.drop(columns=['lat', 'lon'], errors='ignore'), use_container_width=True)
 
 # --- PÁGINA 3: TERRITÓRIOS (OPENSTREETMAP) ---
 elif choice == "🗺️ Territórios RH-V":
     st.title("🗺️ Mapa de Atuação - OpenStreetMap")
-    st.markdown("Visualização geográfica das bases de capacitação e frentes de campo.")
-    
-    # Centralizado na Baía de Guanabara
     m = folium.Map(location=[-22.8, -43.1], zoom_start=9, tiles="OpenStreetMap")
-    
     for idx, row in df_t_filtered.iterrows():
-        color = COLOR_MAP.get(row['Eixo Temático'], "#64748B")
         folium.Marker(
             [row['lat'], row['lon']], 
-            popup=f"<b>Local:</b> {row['Local']}<br><b>Eixo:</b> {row['Eixo Temático']}<br><b>Tema:</b> {row['Subtema']}",
-            tooltip=f"{row['Local']} - {row['Subtema']}",
-            icon=folium.Icon(color="green" if "Agro" in row['Eixo Temático'] else "blue", icon="info-sign")
+            popup=f"<b>{row['Local']}</b><br>{row['Subtema']}",
+            tooltip=row['Local']
         ).add_to(m)
-    
     st_folium(m, width=1200, height=600)
 
 # --- PÁGINA 4: LOGÍSTICA & ALIMENTAÇÃO ---
 elif choice == "⚙️ Logística & Alimentação":
     st.title("⚙️ Logística, Coffee Break e Transporte")
-    st.markdown("Gestão de insumos e necessidades logísticas para cada atividade.")
     
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("☕ Necessidade de Alimentação")
-        # Filtrar onde há qualquer tipo de alimentação (marcado com X)
-        df_food = df_t_filtered[
-            (df_t_filtered["Coffe break (Sim/Não)"].str.upper() == "X") | 
-            (df_t_filtered["Almoço (Sim/Não)"].str.upper() == "X") | 
-            (df_t_filtered["Lanche (Sim/Não)"].str.upper() == "X")
-        ][["Local", "Subtema", "Coffe break (Sim/Não)", "Almoço (Sim/Não)", "Lanche (Sim/Não)"]]
-        st.dataframe(df_food, use_container_width=True, hide_index=True)
+        cols_food = [c for c in ["Local", "Subtema", "Coffe break (Sim/Não)", "Almoço (Sim/Não)", "Lanche (Sim/Não)"] if c in df_t_filtered.columns]
+        st.dataframe(df_t_filtered[cols_food], use_container_width=True, hide_index=True)
     
     with col2:
         st.subheader("🚐 Logística de Transporte")
-        # Separar Visitas Técnicas conforme solicitado
-        df_visitas = df_t_filtered[df_t_filtered["Tipo de Atividade"] == "Visita Técnica"]
-        df_outros = df_t_filtered[df_t_filtered["Tipo de Atividade"] != "Visita Técnica"]
-        
-        st.write("📌 **Visitas Técnicas (Requerem Logística Especial):**")
-        if not df_visitas.empty:
-            st.dataframe(df_visitas[["Local", "Subtema", "Tipo Veículo", "KM Previsto"]], use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhuma visita técnica filtrada.")
+        if "Tipo de Atividade" in df_t_filtered.columns:
+            df_visitas = df_t_filtered[df_t_filtered["Tipo de Atividade"] == "Visita Técnica"]
+            st.write("📌 **Visitas Técnicas:**")
+            st.dataframe(df_visitas[["Local", "Subtema", "Tipo Veículo", "KM Previsto"]] if not df_visitas.empty else pd.DataFrame(), use_container_width=True, hide_index=True)
             
-        st.write("🏢 **Atividades em Base/Sede:**")
-        st.dataframe(df_outros[["Local", "Subtema", "Tipo Veículo", "KM Previsto"]].head(10), use_container_width=True, hide_index=True)
+            st.write("🏢 **Outras Atividades:**")
+            df_outros = df_t_filtered[df_t_filtered["Tipo de Atividade"] != "Visita Técnica"]
+            st.dataframe(df_outros[["Local", "Subtema", "Tipo Veículo", "KM Previsto"]].head(10), use_container_width=True, hide_index=True)
 
 # --- PÁGINA 5: CALENDÁRIO ---
 elif choice == "📅 Calendário de Atividades":
     st.title("📅 Calendário do Projeto")
-    st.markdown("Substituindo a linha do tempo por uma visão de calendário mensal/semanal.")
-    
     calendar_events = []
-    for idx, row in df_t_filtered.iterrows():
-        # Cores baseadas no eixo
-        color = COLOR_MAP.get(row['Eixo Temático'], "#64748B")
-        calendar_events.append({
-            "title": f"{row['Subtema']} - {row['Local']}",
-            "start": row['Data'].isoformat(),
-            "end": row['Data'].isoformat(),
-            "backgroundColor": color,
-            "borderColor": color,
-        })
+    if "Data" in df_t_filtered.columns:
+        for idx, row in df_t_filtered.iterrows():
+            if pd.notna(row['Data']):
+                color = COLOR_MAP.get(row['Eixo Temático'], "#64748B")
+                calendar_events.append({
+                    "title": f"{row['Subtema']} ({row['Local']})",
+                    "start": row['Data'].isoformat() if hasattr(row['Data'], 'isoformat') else str(row['Data']),
+                    "backgroundColor": color,
+                })
     
-    calendar_options = {
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,timeGridWeek,listWeek",
-        },
-        "initialView": "dayGridMonth",
-        "locale": "pt-br",
-    }
-    calendar(events=calendar_events, options=calendar_options)
+    calendar(events=calendar_events, options={"initialView": "dayGridMonth", "locale": "pt-br"})
 
 # --- PÁGINA 6: PRODUTOS ---
 elif choice == "📦 Portfólio de Produtos":
-    st.title("📦 Produtos Contratuais e Entregas (BID/SEAS)")
-    st.markdown("Documentação oficial e entregas aprovadas.")
-    
+    st.title("📦 Produtos Contratuais e Entregas")
     st.markdown("""
         <div style="background-color: #1E293B; padding: 20px; border-radius: 12px; border: 1px solid #334155;">
             <h3 style="color: #10B981; margin-top:0;">📄 Entrega P1: Plano de Trabalho</h3>
-            <p>Última versão entregue e aprovada disponível para consulta no repositório oficial.</p>
-            <a href="https://github.com/grupomyr/sbn-guanabara/raw/main/369-P1-PLANO-DE-TRABALHO-R04-260601.pdf" target="_blank" style="text-decoration: none;">
+            <p>Última versão entregue e aprovada disponível para consulta.</p>
+            <a href="https://github.com/grupomyr/sbn-guanabara/raw/main/369-P1-PLANO-DE-TRABALHO-R04-260601.pdf" target="_blank">
                 <button style="background-color: #10B981; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
                     ⬇️ Baixar P1 - Versão R04 (PDF)
                 </button>
             </a>
         </div>
     """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    st.subheader("Status das Entregas")
-    produtos = [
-        {"ID": "P1", "Produto": "Plano de Trabalho", "Status": "✅ Aprovado", "Versão": "R04"},
-        {"ID": "P2", "Produto": "Materiais Pedagógicos e Kits", "Status": "⏳ Em Elaboração", "Versão": "R01"},
-        {"ID": "P3", "Produto": "Relatório Técnico Ciclo 1", "Status": "📅 Planejado", "Versão": "-"},
-    ]
-    st.table(produtos)
 
 # --- PÁGINA 7: INDICADORES ---
 elif choice == "📊 Indicadores Estratégicos":
     st.title("📊 Indicadores e Monitoramento")
-    st.markdown("Preparação para integração com Google Forms e Planilhas sob diretrizes da LGPD.")
-    
-    st.info("💡 **Próximos Passos:** Cada capacitação terá um link exclusivo do Forms para coleta de dados sociodemográficos, alimentando automaticamente este painel via Google Sheets API.")
-    
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        st.subheader("Garantia de Paridade de Gênero")
-        fig_g = px.pie(values=[55, 45], names=["Feminino (Meta)", "Masculino"], color_discrete_sequence=["#10B981", "#3B82F6"], hole=0.4, template="plotly_dark")
-        st.plotly_chart(fig_g, use_container_width=True)
-    with col_g2:
-        st.subheader("Meta de Envolvimento Juvenil")
-        fig_y = px.bar(x=["Meta Jovens", "Outros"], y=[35, 65], color=["#F59E0B", "#64748B"], color_discrete_map="identity", template="plotly_dark")
-        st.plotly_chart(fig_y, use_container_width=True)
+    st.info("Preparação para integração com Google Forms e Planilhas (LGPD)")
+    fig_g = px.pie(values=[55, 45], names=["Feminino (Meta)", "Masculino"], title="Paridade de Gênero", template="plotly_dark")
+    st.plotly_chart(fig_g)
 
-# Rodapé Institucional
 st.sidebar.markdown("---")
 st.sidebar.caption("Guanabara Verde Resiliente • Versão R02")
-st.sidebar.caption("Realização: SEAS-RJ | BID | CANADÁ")
